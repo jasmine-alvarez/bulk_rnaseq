@@ -1,0 +1,8 @@
+# path to URL or sample sheet (TSV format, columns: sample, condition, ...)
+outdir: /oceanus/collab/compbio/pipelines/bulk_rnaseq/example_analysis 
+samples: /oceanus/collab/compbio/pipelines/bulk_rnaseq/config/samples.tsv
+fasta: /oceanus/collab/compbio/projects/ErikBlomain/20240216_desmoid_RNA-seq/data/reference/GRCh38.d1.vd1.fa
+gtf: /oceanus/collab/compbio/projects/ErikBlomain/20240216_desmoid_RNA-seq/data/reference/gencode.v36.annotation.gtf
+STAR_index: /oceanus/collab/compbio/projects/ErikBlomain/20240216_desmoid_RNA-seq/data/reference/star-2.7.5c_GRCh38.d1.vd1_gencode.v36
+params:
+        trimmomatic_trimmer: ["LEADING:1","TRAILING:3"]

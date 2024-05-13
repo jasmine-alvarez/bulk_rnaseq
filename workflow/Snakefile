@@ -1,0 +1,200 @@
+#configfile: "/oceanus/collab/compbio/pipelines/bulk_rnaseq/config/config.oliver.yaml"
+
+import pandas as pd
+
+SAMPLES = pd.read_table(config['samples']).set_index("sample", drop = False)
+
+rule all:
+	input:
+		# bams aligned to reference genome with STAR
+		expand("{outdir}/star/{sample}/{sample}.bam", 
+			outdir = config["outdir"], sample = SAMPLES.index.tolist()),
+		# raw counts from STAR output
+		expand("{outdir}/star/{sample}/ReadsPerGene.out.tab", outdir = config["outdir"], sample = SAMPLES.index.tolist()),
+		# counts table
+		expand("{outdir}/star/raw_counts.tsv", outdir = config["outdir"]),
+		# HTML report aggregating FASTQC results
+		expand("{outdir}/multiqc/multiqc.html", outdir = config["outdir"])
+
+rule fastqc_fq1:
+	input:
+		lambda wildcards: SAMPLES.loc[wildcards.sample]['fq1']
+	output:
+		html="{outdir}/fastqc/{sample}_1.html",
+		zip="{outdir}/fastqc/{sample}_1_fastqc.zip"
+	params:
+		extra="--quiet"
+	log:
+		"{outdir}/logs/fastqc/{sample}_1.log"
+	threads: 1
+	resources:
+		mem_mb = 1024
+	wrapper:
+		"v3.3.6/bio/fastqc"
+
+rule fastqc_fq2:
+	input:
+		lambda wildcards: SAMPLES.loc[wildcards.sample]['fq2']
+	output:
+		html="{outdir}/fastqc/{sample}_2.html",
+		zip="{outdir}/fastqc/{sample}_2_fastqc.zip"
+	params:
+		extra="--quiet"
+	log:
+		"{outdir}/logs/fastqc/{sample}_2.log"
+	threads: 1
+	resources:
+		mem_mb = 1024
+	wrapper:
+		"v3.3.6/bio/fastqc"
+
+#rule star_index:
+#	input:
+#		fasta=config["fasta"],
+#		gtf=config["gtf"]
+#	output:
+#		"{outdir}/star/star_index",
+#	threads: 8
+#	params:
+#		extra = "",
+#	log:
+#		"{outdir}/logs/star_index.genome.log"
+#	wrapper:
+#		"v3.3.6/bio/star/index"
+
+rule trimmomatic_pe:
+	input:
+		r1 = lambda wildcards: SAMPLES.loc[wildcards.sample]['fq1'],
+		r2 = lambda wildcards: SAMPLES.loc[wildcards.sample]['fq2']
+	output:
+		r1 = "{outdir}/trimmomatic/{sample}.1.fastq.gz",
+		r2 = "{outdir}/trimmomatic/{sample}.2.fastq.gz",
+		# reads where trimming entirely removed the mate
+		r1_unpaired = "{outdir}/trimmomatic/{sample}.1.unpaired.fastq.gz",
+		r2_unpaired = "{outdir}/trimmomatic/{sample}.2.unpaired.fastq.gz"
+	log:
+		"{outdir}/logs/trimmomatic/{sample}.log"
+	params:
+		# list of trimmers (see manual)
+		trimmer=config["params"]["trimmomatic_trimmer"],
+		# optional parameters
+		extra="",
+		compression_level="-9"
+	threads:
+		32
+	resources:
+		mem_mb=1024
+	wrapper:
+		"v3.3.6/bio/trimmomatic/pe"
+
+rule fastqc_trimmed_fq1:
+	input:
+		"{outdir}/trimmomatic/{sample}.1.fastq.gz",
+	output:
+		html="{outdir}/fastqc/{sample}_1_trimmed.html",
+		zip="{outdir}/fastqc/{sample}_1_trimmed_fastqc.zip"
+	params:
+		extra="--quiet"
+	log:
+		"{outdir}/logs/fastqc/{sample}_1_trimmed.log"
+	threads: 1
+	resources:
+		mem_mb = 1024
+	wrapper:
+		"v3.3.6/bio/fastqc"
+
+rule fastqc_trimmed_fq2:
+	input:
+		"{outdir}/trimmomatic/{sample}.2.fastq.gz",
+	output:
+		html="{outdir}/fastqc/{sample}_2_trimmed.html",
+		zip="{outdir}/fastqc/{sample}_2_trimmed_fastqc.zip"
+	params:
+		extra="--quiet"
+	log:
+		"{outdir}/logs/fastqc/{sample}_2_trimmed.log"
+	threads: 1
+	resources:
+		mem_mb = 1024
+	wrapper:
+		"v3.3.6/bio/fastqc"
+
+rule multiqc_dir:
+	input:
+		expand("{outdir}/fastqc/{sample}_{unit}.html", sample = SAMPLES.index.tolist(), unit = [1,2], outdir = config['outdir']),
+		expand("{outdir}/fastqc/{sample}_{unit}_trimmed.html", sample = SAMPLES.index.tolist(), unit = [1,2], outdir = config['outdir'])
+	output:
+		"{outdir}/multiqc/multiqc.html",
+		directory("{outdir}/multiqc/multiqc_data"),
+	params:
+		# Optional: extra parameters for multiqc.
+		extra="--data-dir",
+	log:
+		"{outdir}/logs/multiqc.log",
+	wrapper:
+		"v3.3.6/bio/multiqc"
+
+rule star_pe_multi:
+	input:
+		# use a list for multiple fastq files for one sample
+		# usually technical replicates across lanes/flowcells
+		#fq1= lambda wildcards:[SAMPLES.loc[wildcards.sample]['fq1']],
+		#fq2= lambda wildcards: [SAMPLES.loc[wildcards.sample]['fq2']],
+		fq1 = "{outdir}/trimmomatic/{sample}.1.fastq.gz",
+		fq2 = "{outdir}/trimmomatic/{sample}.2.fastq.gz",
+		idx=config['STAR_index'],
+	output:
+		reads_per_gene="{outdir}/star/{sample}/ReadsPerGene.out.tab",
+		# see STAR manual for additional output files
+		aln="{outdir}/star/{sample}/{sample}.bam",
+		log="{outdir}/logs/star/{sample}/Log.out",
+		sj="{outdir}/star/{sample}/SJ.out.tab",
+		unmapped=["{outdir}/star/{sample}/unmapped.1.fastq.gz", "{outdir}/star/{sample}/unmapped.2.fastq.gz"],
+	log:
+		"{outdir}/logs/star/{sample}.log",
+	params:
+		# optional parameters
+		extra= "--outSAMtype BAM SortedByCoordinate --quantMode GeneCounts --sjdbGTFfile {}".format(config["gtf"])
+	threads: 8
+	resources:
+		tmpdir="{}/tmp".format(config["outdir"])
+	wrapper:
+		"v3.3.6/bio/star/align"
+
+rule rownames_counts:
+	input:
+		expand("{outdir}/star/{sample}/ReadsPerGene.out.tab", outdir = config["outdir"], sample = SAMPLES.index.tolist()[1]),
+	output:
+		temp("{outdir}/star/rownames_counts.tsv")
+	shell:
+		'''echo -e "" > {output} ; tail -n +5 {input} | cut -f1 >> {output}'''
+
+rule sample_counts:
+	input:
+		"{outdir}/star/{sample}/ReadsPerGene.out.tab"
+	output:
+		temp("{outdir}/star/{sample}_counts.tsv")
+	shell:
+		'''echo {wildcards.sample} > {output} ; tail -n +5 {input} | cut -f2 >> {output}'''
+
+rule gather_counts:
+	input:
+		rownames = "{outdir}/star/rownames_counts.tsv",
+		all_samples = expand("{outdir}/star/{sample}_counts.tsv", outdir = config["outdir"], sample = SAMPLES.index.tolist())
+	output:
+		"{outdir}/star/raw_counts.tsv"
+	shell:
+		"paste {input.rownames} {input.all_samples} > {output}"
+
+rule samtools_index:
+	input:
+		"{outdir}/star/{sample}/{sample}.bam",
+	output:
+		"{outdir}/star/{sample}/{sample}.bam.bai",
+	log:
+		"{outdir}/logs/samtools_index/{sample}.log",
+	params:
+		extra="",
+	threads: 4
+	wrapper:
+		"v3.3.6/bio/samtools/index"
