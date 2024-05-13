@@ -1,3 +1,5 @@
 example_analysis*
 .snakemake/
 snakemake/
+workflow/Snakefile_without_trimming
+workflow/readme.txt
