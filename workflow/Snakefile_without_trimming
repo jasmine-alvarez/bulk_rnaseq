@@ -161,6 +161,19 @@ rule star_pe_multi:
 	wrapper:
 		"v3.3.6/bio/star/align"
 
+rule samtools_index:
+        input:
+		"{outdir}/star/{sample}/{sample}.bam",
+        output
+                "{outdir}/star/{sample}/{sample}.bam.bai",
+        log:
+                "{outdir}/logs/samtools_index/{sample}.log",
+        params:
+                extra="",
+        threads: 4
+        wrapper:
+                "v3.3.6/bio/samtools/index"
+
 rule rownames_counts:
 	input:
 		expand("{outdir}/star/{sample}/ReadsPerGene.out.tab", outdir = config["outdir"], sample = SAMPLES.index.tolist()[1]),
@@ -169,6 +182,7 @@ rule rownames_counts:
 	shell:
 		'''echo -e "" > {output} ; tail -n +5 {input} | cut -f1 >> {output}'''
 
+#Note: decide on whether extracting column 2 (unstranded) and columns 3 and 4 (stranded) from ReadsPerGene.out.tab file. 
 rule sample_counts:
 	input:
 		"{outdir}/star/{sample}/ReadsPerGene.out.tab"
@@ -186,15 +200,15 @@ rule gather_counts:
 	shell:
 		"paste {input.rownames} {input.all_samples} > {output}"
 
-rule samtools_index:
-	input:
-		"{outdir}/star/{sample}/{sample}.bam",
-	output:
-		"{outdir}/star/{sample}/{sample}.bam.bai",
-	log:
-		"{outdir}/logs/samtools_index/{sample}.log",
-	params:
-		extra="",
-	threads: 4
-	wrapper:
-		"v3.3.6/bio/samtools/index"
+#rule samtools_index:
+#	input:
+#		"{outdir}/star/{sample}/{sample}.bam",
+#	output:
+#		"{outdir}/star/{sample}/{sample}.bam.bai",
+#	log:
+#		"{outdir}/logs/samtools_index/{sample}.log",
+#	params:
+#		extra="",
+#	threads: 4
+#	wrapper:
+#		"v3.3.6/bio/samtools/index"

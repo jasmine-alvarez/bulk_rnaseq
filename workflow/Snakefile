@@ -169,6 +169,7 @@ rule rownames_counts:
 	shell:
 		'''echo -e "" > {output} ; tail -n +5 {input} | cut -f1 >> {output}'''
 
+#Note: decide on whether extracting column 2 (unstranded) and columns 3 and 4 (stranded) from ReadsPerGene.out.tab file. 
 rule sample_counts:
 	input:
 		"{outdir}/star/{sample}/ReadsPerGene.out.tab"
